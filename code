@@ -1,0 +1,342 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.16; 
+
+//Registration Smart contract
+
+contract Registration {
+    
+    address public regulatory_authority; 
+    mapping(address => bool) public Dairy_Farm; 
+    mapping(address => bool) public Dairy_Factory; 
+     mapping(address => bool) public Retailer; 
+    mapping(address => bool) public distributor; 
+
+
+    //Registration Events
+    
+    event RegistrationSmartContractDeployer (address regulatory_authority); 
+    event Dairy_FarmRegistered(address indexed regulatory_authority, address indexed Dairy_Farm);
+    event Dairy_FactoryRegistered(address indexed regulatory_authority, address indexed Dairy_Factory);
+    event DistributorRegistered(address indexed regulatory_authority, address indexed distributor);
+    event RetailerRegistered(address indexed regulatory_authority, address indexed Retailer);
+
+    //Modifiers
+    
+    modifier onlyregulatory_authority() {
+        require(regulatory_authority == msg.sender, "Only the regulatory authority is permitted to run this function");
+        _;
+    }
+    
+    constructor() {
+        regulatory_authority = msg.sender;
+        emit RegistrationSmartContractDeployer(regulatory_authority);
+    }
+    
+    //Registration Functions
+       function Dairy_FarmRegistration (address user) public onlyregulatory_authority {
+        require(!Dairy_Farm[user], "The farm owner is already registered");
+        Dairy_Farm[user] = true;   
+        emit Dairy_FarmRegistered(msg.sender, address(user));
+    }
+    function Dairy_FactoryRegistration (address user) public onlyregulatory_authority {
+        require(!Dairy_Factory[user], "The factory is already registered");
+        Dairy_Factory[user] = true; 
+        emit Dairy_FactoryRegistered(msg.sender, address(user));  
+    }
+      function RetailerRegistration (address user) public onlyregulatory_authority{
+        require(!Retailer[user], "The Retailer is already registered");
+        Retailer[user] = true;
+        emit RetailerRegistered(msg.sender, address(user));  
+    } 
+      function distributorRegistration (address user) public onlyregulatory_authority {
+        require(!distributor[user], "The distributor is already registered");
+        distributor[user] = true;
+        emit DistributorRegistered(msg.sender, address(user));  
+    }
+    
+  
+}
+contract DairyLotCommitment {
+ Registration public reg_contract; 
+ uint public StartingTime;
+ uint public MaxMilkPacks;  
+ uint public MinThreshold;
+ uint public MilkLotCommitmentDuration; 
+ mapping(address => RetailerChoice) public RetailerAffiliation; 
+ struct RetailerChoice{
+ address a_distributor; 
+ bool Affiliated; 
+ }
+ uint transportingTime;
+ uint MilkAmountinLitre;
+ uint MilkBidsCounter = 0; 
+ uint public RetailersCounter = 0; 
+ uint public CurrentMilkBids;
+ address[99999] public Bidders; 
+ mapping(address => bool) public Distributor_Committed; 
+ address public CommittedDistributor; 
+ bool public DistributorCommitted;
+ mapping(address => bool) public BidderCommitted; 
+ mapping(address => uint) public BidderAmount; 
+ bool public ProductionPermission; 
+ bool public manufactured; 
+ uint public deliveryduration; 
+ uint public MilkPacks;
+ //uint public currentLotstate;
+ uint public MilkLotExpiryDate;
+ uint public BiddersCounter = 0;
+ address public CommittedDairy_Farm;
+ address public CommittedDairy_Factory;
+
+ event CollectedMilkDetails (address indexed _Dairy_Farm, address indexed _MilkLotEA, uint _transportingTime, uint _MilkAmountinLitre);
+ event CommitmentDetails (address indexed _Dairy_Factory, address indexed _MilkLotEA, uint _MaxMilkPacks,
+ uint _MinThreshold, uint _StartingTime, uint _MilkLotCommitmentDuration);
+ event DistributorCommitmentDetails(address indexed _distributor, address indexed _MilkLotEA);
+ event RetailerCommitmentDetails(address indexed Retailer , address indexed _MilkLotEA, uint _placedorder);
+ event Thetimewindowisend(address indexed _msgsender, bytes32 _windowclosed);
+ event MilkProductionApproved(bytes32 _approved, uint _CurrentMilkBids, address indexed _MilkLotEA);
+ event MilkProductionRejected(bytes32 _denied, uint _CurrentMilkBids, address indexed _MilkLotEA);
+ event MilkLotisProduced(address indexed _Dairy_Factory, address indexed _MilkLotEA, 
+ uint _CurrentMilkBids, uint _productionTime, uint _deliveryduration, uint _MilkLotExpiryDate); 
+
+  modifier onlyDairy_Farm{
+    require(reg_contract.Dairy_Farm(msg.sender), "Only the Dairy_Farm is allowed to execute this function");
+    _;
+    }
+    modifier onlyRetailer {
+    require(reg_contract.Retailer (msg.sender), "Only the Retailer is allowed to execute this function");
+    _;
+    }
+    
+    modifier onlyDairy_Factory{
+    require(reg_contract.Dairy_Factory(msg.sender), "Only the Dairy_Factory is allowed to execute this function");
+    _;
+    }
+    
+    modifier onlyDistributor{
+    require(reg_contract.distributor(msg.sender), "Only the distributor is allowed to execute this function");
+    _;
+    }
+
+ constructor(address RegistrationSCaddress, uint _transportingTime, uint _MilkAmountinLitre) {
+        reg_contract = Registration(RegistrationSCaddress);
+        transportingTime = _transportingTime;
+        MilkAmountinLitre =_MilkAmountinLitre;
+        StartingTime = block.timestamp;
+        CommittedDairy_Farm = msg.sender;
+        emit CollectedMilkDetails(msg.sender, address(this), transportingTime, MilkAmountinLitre);
+    } 
+
+
+
+    function DairyFactoryCommitment( uint _MinThreshold, uint _MaxMilkPacks, uint _MilkLotCommitmentDuration) public onlyDairy_Factory{
+    MinThreshold = _MinThreshold;
+        MaxMilkPacks = _MaxMilkPacks;
+        MilkLotCommitmentDuration =  _MilkLotCommitmentDuration * 1 minutes; 
+        StartingTime = block.timestamp;
+        CommittedDairy_Factory = msg.sender;
+        emit CommitmentDetails(msg.sender, address(this), MaxMilkPacks, MinThreshold, StartingTime, MilkLotCommitmentDuration);
+    } 
+    
+    function MilkDistributorCommitment() public onlyDistributor{
+        require(block.timestamp <= StartingTime + MilkLotCommitmentDuration, "The Commitment Duration is end, any commitment is not accepted ");
+        require(!DistributorCommitted, "The Milk Lot has already been committed to by another distributor ");
+        Distributor_Committed[msg.sender] = true; 
+        DistributorCommitted =true;
+        CommittedDistributor = msg.sender;
+        emit DistributorCommitmentDetails(msg.sender, address(this));  
+    }
+    function AffiliatedDistributor (address _distributor) public onlyRetailer{ 
+        require(!RetailerAffiliation[msg.sender].Affiliated, "This Retailer has an affiliated distributor already ");
+        RetailerAffiliation [msg.sender].a_distributor = _distributor;
+        RetailerAffiliation [msg.sender].Affiliated = true;
+    }
+     function PlaceMilkBids(uint _PlacedBid) public onlyRetailer{
+        require(block.timestamp <= StartingTime + MilkLotCommitmentDuration , "The Commitment Duration is end, any new Bid is not accepted");
+        require(Distributor_Committed[RetailerAffiliation[msg.sender].a_distributor], "This Milk Retailer's affiliated distributor has not committed to delivering this Lot.");
+        require(_PlacedBid + MilkBidsCounter <= MaxMilkPacks, "The specified amount is greater than the Lot's maximum or the remaining number of Milk Packs.");
+        require(!BidderCommitted[msg.sender], "This Retailer placed a bid before");
+        require(MilkBidsCounter<=999999);
+        require(_PlacedBid<=999999);
+        MilkBidsCounter += _PlacedBid;
+        CurrentMilkBids = MilkBidsCounter; 
+        Bidders[BiddersCounter]=msg.sender;
+        BidderCommitted[msg.sender] = true; 
+        BidderAmount[msg.sender] = _PlacedBid; 
+        RetailersCounter += 1;
+        BiddersCounter += 1;
+
+        if(CurrentMilkBids == MaxMilkPacks){
+            emit RetailerCommitmentDetails(msg.sender, address(this), _PlacedBid);
+            emit Thetimewindowisend (msg.sender, bytes32("Commitment Window is now closed"));
+            emit MilkProductionApproved(bytes32("Production is approved"), CurrentMilkBids, address(this));
+            ProductionPermission = true;
+             }
+            else {
+            emit RetailerCommitmentDetails(msg.sender, address(this), _PlacedBid);
+        }
+        
+           
+    }
+    function MilkLotCommitmentTimeisClosed() public onlyDairy_Factory{
+        require(block.timestamp <= StartingTime + MilkLotCommitmentDuration , "There is still time left");
+        if(CurrentMilkBids < MinThreshold){
+             emit MilkProductionRejected(bytes32("Milk Lot Production is rejected"), CurrentMilkBids, address(this));
+            ProductionPermission = false;
+             }
+            else if (CurrentMilkBids >= MinThreshold) {
+                emit RetailerCommitmentDetails(msg.sender, address(this), CurrentMilkBids);
+                emit MilkProductionApproved(bytes32("Milk Lot Production is approved"), CurrentMilkBids, address(this));
+            ProductionPermission = true;
+
+            }
+        }
+        function MilkLotProduction(uint _expirydurationinDays, uint _deliverydurationindays, uint _MilkPacks) public onlyDairy_Factory{
+        require(ProductionPermission, "Not allowed: Dairy Factory cannot produce Lot");
+        require(!manufactured, "This Lot has already been manufactured");
+        manufactured = true;        
+        MilkLotExpiryDate = block.timestamp + (_expirydurationinDays * 1 days);
+        deliveryduration = block.timestamp + (_deliverydurationindays * 1 days);
+        MilkPacks = _MilkPacks;
+        emit MilkLotisProduced(msg.sender, address(this), MilkPacks, block.timestamp, deliveryduration, MilkLotExpiryDate);
+    }
+
+    }
+
+contract Consumption {
+    Registration public reg_contract; 
+    DairyLotCommitment public Comm_contract; 
+    uint public deliveryduration;
+    //address public MilkLotEA; 
+    uint public MilkLotExpiryDate;
+    uint DeliveredMilkPacksCounter = 0;
+    //uint ReceivedMilkPacksCounter = 0;
+    uint public CurrentDeliveredMilkPacks;
+    uint public CurrentReceivedMilkPacks;
+    enum  LotState  {NotManufactured, EnRoute, Delivered}
+    LotState public Lotstate;
+
+    mapping(address => bool) public MilkReceptionConfirmation;
+    mapping(address => uint) public ReceivedAmount; 
+    mapping(address => uint) public usedMilkPacksAmount;
+    mapping(address => uint) public wastedMilkPacksAmount;
+
+    event StartMilkLotDelivery (address indexed _distributor, address indexed _MilkLotEA, uint _StartingTime);
+    event ConfirmMilkPacksReception (address indexed _Retailer, address indexed _MilkLotEA, uint _receivedMilkPacks, uint _ReceptionTime);
+    event ConfirmMilkPacksandEndDelivery (address indexed _distributor, address indexed _MilkLotEA, address indexed _Retailer, uint _deliveredMilkPacks, uint _DeliveryTime); 
+    
+    event MilkPacksUsed(address indexed _Retailer, uint _Amountused, uint _DateofUse);
+    event MilkPacksDisposed(address indexed _Retailer, uint _disposedAmount, uint _DateofDisposal);
+
+    modifier onlyRetailer {
+    require(reg_contract.Retailer(msg.sender), "Only the Retailer is allowed to execute this function");
+    _;
+    }
+    modifier onlyDairy_Factory{
+    require(reg_contract.Dairy_Factory(msg.sender), "Only the Dairy_Factory is allowed to execute this function");
+    _;
+    }
+    modifier onlyDistributor{
+    require(reg_contract.distributor(msg.sender), "Only the distributor is allowed to execute this function");
+    _;
+    }
+ constructor(address registractionSC, address DairyLotCommitmentSC) {
+    reg_contract = Registration(registractionSC);
+    Comm_contract = DairyLotCommitment(DairyLotCommitmentSC);
+    //MilkLotEA = DairyLotCommitmentSC;
+    }
+ function startLotDelivery() public onlyDistributor{
+        require(Comm_contract.manufactured(), "This Lot has either already been delivered or not manufactured yet");
+        Lotstate = LotState.EnRoute;
+        emit StartMilkLotDelivery (msg.sender, address(Comm_contract), block.timestamp);
+    }
+ function MilkPacksReception(uint _receivedMilkPacks) public onlyRetailer{
+        require(Lotstate == LotState.EnRoute, "Can't confirm Lot reception as it is not out for delivery yet");
+        require(Comm_contract.BidderCommitted(msg.sender), "This Retailer  has not committed and therefore cannot receive the MilkPacks");
+        require(!MilkReceptionConfirmation[msg.sender],"This Retailer  has already confirmed receiving their MilkPacks");
+        require(_receivedMilkPacks<=99999);
+        require(_receivedMilkPacks == Comm_contract.BidderAmount(msg.sender), "Can't confrim reception because the number of MilkPacks does not equal the bidder's committed amount");
+        MilkReceptionConfirmation[msg.sender] = true; 
+        ReceivedAmount[msg.sender] = _receivedMilkPacks; 
+        emit ConfirmMilkPacksReception(msg.sender, address(Comm_contract), _receivedMilkPacks, block.timestamp);
+    }
+    function MilkPacksDelivery(address _Retailer , uint _deliveredMilkPacks) public onlyDistributor{ 
+        require(_deliveredMilkPacks == Comm_contract.BidderAmount(_Retailer ), "Can't confrim delivery because the number of MilkPacks does not equal the bidder's committed amount");
+        require(Lotstate == LotState.EnRoute, "Can't confirm Lot delivery as it is not out for delivery yet or has already been delivered");
+        require(Comm_contract.Distributor_Committed(msg.sender), "Only a committed distributor is allowed to deliver MilkPacks to Retailer");
+        require(MilkReceptionConfirmation[_Retailer],"The healthcare center has not confirmed receiving the MilkPacks");
+        DeliveredMilkPacksCounter += _deliveredMilkPacks;
+        CurrentDeliveredMilkPacks = DeliveredMilkPacksCounter;
+        if(CurrentDeliveredMilkPacks == Comm_contract.CurrentMilkBids()){
+            Lotstate = LotState.Delivered; 
+            emit ConfirmMilkPacksandEndDelivery(msg.sender, address(Comm_contract),_Retailer, _deliveredMilkPacks, block.timestamp); 
+             
+
+        }
+    }
+ function UseMilkPacks(uint _usedMilkPacks) public onlyRetailer {
+        require(Comm_contract.BidderCommitted(msg.sender), "The executor of this function needs to be a committed bidder");
+
+        require(_usedMilkPacks + usedMilkPacksAmount[msg.sender] + wastedMilkPacksAmount[msg.sender] <= ReceivedAmount[msg.sender]);
+        require(_usedMilkPacks<= 999999999);
+        usedMilkPacksAmount[msg.sender] += _usedMilkPacks; 
+        emit MilkPacksUsed(msg.sender, _usedMilkPacks, block.timestamp);
+    }
+ function DisposeMilkPacks(uint _disposedMilkPacks) public onlyRetailer {
+        require(_disposedMilkPacks + usedMilkPacksAmount[msg.sender] + wastedMilkPacksAmount[msg.sender] <= ReceivedAmount[msg.sender]);
+         require(_disposedMilkPacks<= 999999999);
+        wastedMilkPacksAmount[msg.sender] += _disposedMilkPacks; 
+        emit MilkPacksDisposed(msg.sender, _disposedMilkPacks, block.timestamp);
+    }
+}
+contract DairyWasteAssessment {
+
+    Registration public reg_contract2; 
+    DairyLotCommitment public Comm_contract2; 
+    Consumption public DC_contract;
+    uint public ViolationCounter =0;  
+    uint public OverProducedMilkPacksAmount;
+    //uint public MilkPacksunusedMilkPacksAmount;
+    uint public MilkPacksmissingAmount;
+   
+
+    event DistributorViolation(address _distributor, bytes32 _msg, uint _MilkPacksmissingAmount);
+    event RetailerViolation(address _Retailer, bytes32 _msg, uint _MilkPacksunusedMilkPacksAmount);
+    event Dairy_FactoryViolation(address _Dairy_Factory, bytes32 _msg, uint _excessAmount);
+    event NoViolation(address _Dairy_Factory, bytes32 _msg);
+    modifier onlyregulatory_authority() {
+    require(reg_contract2.regulatory_authority() ==msg.sender, "Only the regulatory_authority is permitted to run this function");
+    _;
+    }
+    constructor(address registrationSC, address DairyLotCommitmentSC, address ConsumptionSC){
+        reg_contract2 = Registration(registrationSC);
+        Comm_contract2 = DairyLotCommitment(DairyLotCommitmentSC);
+        DC_contract = Consumption(ConsumptionSC);
+    }
+    
+    function ViolationCheck() public onlyregulatory_authority {
+        uint localViolationCounter = ViolationCounter;
+        if (Comm_contract2.MilkPacks() > Comm_contract2.CurrentMilkBids()) {
+            OverProducedMilkPacksAmount = Comm_contract2.MilkPacks() - Comm_contract2.CurrentMilkBids();
+            localViolationCounter +=1;
+             emit Dairy_FactoryViolation(Comm_contract2.CommittedDairy_Factory(), bytes32("Excess Amount Produced"), OverProducedMilkPacksAmount);
+        }
+        if(DC_contract.CurrentDeliveredMilkPacks() < Comm_contract2.MilkPacks()){
+            MilkPacksmissingAmount = Comm_contract2.MilkPacks() - DC_contract.CurrentDeliveredMilkPacks();
+            localViolationCounter +=1;
+            emit DistributorViolation(Comm_contract2.CommittedDistributor(), bytes32("Distributor Failed To Deliver"), MilkPacksmissingAmount);
+        }
+
+        for(uint i = 0; i < Comm_contract2.RetailersCounter(); i++){
+            if(DC_contract.wastedMilkPacksAmount(Comm_contract2.Bidders(i)) > 0){
+                localViolationCounter +=1;
+                emit RetailerViolation(Comm_contract2.Bidders(i), bytes32("Retailer wasted Milk Packs"), DC_contract.wastedMilkPacksAmount(Comm_contract2.Bidders(i)));
+            }
+        }
+        ViolationCounter = localViolationCounter;
+        if (   ViolationCounter ==0){
+            emit NoViolation(msg.sender, bytes32("Milk Lot is consumed properly"));
+        }
+    }
+}
